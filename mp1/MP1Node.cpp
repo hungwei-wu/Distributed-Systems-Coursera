@@ -6,7 +6,7 @@
  **********************************/
 
 #include "MP1Node.h"
-
+#include <iostream>
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
  */
@@ -218,6 +218,36 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	/*
 	 * Your code goes here
 	 */
+	MessageHdr* msg = (MessageHdr *)data;
+	if(msg->msgType == JOINREQ){
+		std::cout << "Receive joinreq" << endl;	
+		//add new member to membership list
+		char *new_addr = (char *)(msg+1);
+		int id = addr_to_id(new_addr);
+		cout << "receive id: " << id << endl;
+		short port = addr_to_port(new_addr);
+		cout << "receive port: " << port << endl;	
+		
+		//create target address
+		Address *new_address = new Address();
+		memcpy(new_address->addr, new_addr, sizeof(new_address->addr));
+		
+		long new_heartbeat = *(long*)((char*)msg + size - sizeof(long));
+		std::cout << "receive new heartbeat " << new_heartbeat << endl;
+		cout << "local heartbeat: " << this->memberNode->heartbeat << endl;
+		MemberListEntry new_entry(id, 
+			port, new_heartbeat, this->memberNode->heartbeat);	//use self heartbeat as local time	
+		this->memberNode->memberList.push_back(new_entry);
+
+		//send back JOINREP with new membership list
+		size_t msgsize = sizeof(MessageHdr) + sizeof(this->memberNode->memberList);
+		MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+		memcpy((char *)(send_msg+1), &this->memberNode->memberList, sizeof(this->memberNode->memberList));
+		emulNet->ENsend(&this->memberNode->addr, new_address, (char *)send_msg, msgsize);
+		
+		free(send_msg);
+		delete(new_address);
+	}
 }
 
 /**
@@ -267,6 +297,13 @@ Address MP1Node::getJoinAddress() {
  */
 void MP1Node::initMemberListTable(Member *memberNode) {
 	memberNode->memberList.clear();
+	//TODO: add itself to memberList?
+	// no need? cause will always be introduced by same introducer
+	//Address *new_address = memberNode->addr;
+	//MemberListEntry* new_entry = new MemberListEntry(new_addr->getid(), new_addr->getport()
+	//								, new_addr->heartbeat, this->member->heartbeat);
+	
+		
 }
 
 /**

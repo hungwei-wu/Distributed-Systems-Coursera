@@ -78,4 +78,10 @@ public:
 	virtual ~MP1Node();
 };
 
+int addr_to_id(char addr[]){
+	return *(int *)addr;
+}
+short addr_to_port(char addr[]){
+	return *(short *)&addr[4];
+}
 #endif /* _MP1NODE_H_ */
