@@ -108,7 +108,16 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	memberNode->pingCounter = TFAIL;
 	memberNode->timeOutCounter = -1;
     initMemberListTable(memberNode);
-
+	if(*joinaddr == this->memberNode->addr){
+		//create first member entry for itself
+		MemberListEntry *new_entry = new MemberListEntry(addr_to_id(this->memberNode->addr.addr), addr_to_port(this->memberNode->addr.addr), this->memberNode->heartbeat, this->memberNode->heartbeat);
+		this->memberNode->memberList.push_back(*new_entry);
+		this->memberNode->myPos = this->memberNode->memberList.end()-1;
+		DEBUG(string("Introducer => my pos is ") + to_string((int)(this->memberNode->myPos - this->memberNode->memberList.begin())));
+		stringstream ss;
+		ss << *this->memberNode->myPos;
+		DEBUG(ss.str());
+	}
     return 0;
 }
 
@@ -241,17 +250,36 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		DEBUG(string("member list size: ") + to_string(this->memberNode->memberList.size()));
 		cout << "member list size: " << this->memberNode->memberList.size() << endl;
 		//send back JOINREP with new membership list
-		size_t msgsize = sizeof(MessageHdr) + sizeof(this->memberNode->memberList);
+		auto iter = this->memberNode->memberList.end()-1;	//point to last push backed  item
+		JoinRepData send_data;
+		send_data.pos = iter;
+		send_data.memberList = this->memberNode->memberList;
+		//size_t msgsize = sizeof(MessageHdr) + sizeof(this->memberNode->memberList);
+		size_t msgsize = sizeof(MessageHdr) + sizeof(send_data);
 		MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
-		memcpy((char *)(send_msg+1), &this->memberNode->memberList, sizeof(this->memberNode->memberList));
+		send_msg->msgType = JOINREP;
+		//memcpy((char *)(send_msg+1), &this->memberNode->memberList, sizeof(this->memberNode->memberList));
+		memcpy((char *)(send_msg+1), &send_data, sizeof(send_data));
 		emulNet->ENsend(&this->memberNode->addr, new_address, (char *)send_msg, msgsize);
 		
 		free(send_msg);
 		delete(new_address);
+
+		stringstream ss;
+		ss << this->memberNode->memberList;
+		DEBUG(ss.str());
 	}
 	else if(msg->msgType == JOINREP){
-
+		unsigned int get_data_size = size + (char *)(msg+1) - (char *)(msg);
+		JoinRepData *get_data = (JoinRepData *)malloc(get_data_size);
+		memcpy(get_data, (char *)(msg+1), get_data_size);
+		//auto myPos_pointer = (vector<MemberListEntry>::iterator *)(msg+1);	
+		//auto memberList = *(vector<MemberListEntry> *)(myPos_pointer+1);
+		DEBUG(string("recieved JOINREP, list size: ") + to_string(get_data->memberList.size()));
+		this->memberNode->myPos = get_data->pos;
+		this->memberNode->memberList = get_data->memberList;
 	}
+
 }
 
 /**
@@ -324,8 +352,19 @@ void MP1Node::printAddress(Address *addr)
 
 void MP1Node::DEBUG(string s){
 	#ifdef MYLOG
-	//char s[1024];
-	//sprintf(s, "member list size: %lu", this->memberNode->memberList.size());
 	log->LOG(&this->memberNode->addr ,s.c_str());	
 	#endif
+}
+
+std::ostream & operator<<(std::ostream & str, MemberListEntry & e) { 
+	str << e.getid() << ":" << e.getport();
+	return str;
+}
+
+std::ostream & operator<<(std::ostream & str, vector<MemberListEntry> & v) { 
+	str << endl;
+	for(auto &e : v){
+		str << e << endl;
+	}
+	return str;
 }

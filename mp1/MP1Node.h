@@ -14,7 +14,7 @@
 #include "Member.h"
 #include "EmulNet.h"
 #include "Queue.h"
-
+#include <sstream>
 /**
  * Macros
  */
@@ -43,6 +43,10 @@ typedef struct MessageHdr {
 	enum MsgTypes msgType;
 }MessageHdr;
 
+typedef struct JoinRepData{
+	vector<MemberListEntry>::iterator pos;
+	vector<MemberListEntry> memberList;
+}JoinRepData;
 /**
  * CLASS NAME: MP1Node
  *
@@ -78,12 +82,15 @@ public:
 	virtual ~MP1Node();
 };
 
-int addr_to_id(char addr[]){
+inline int addr_to_id(char addr[]){
 	return *(int *)addr;
 }
 
-short addr_to_port(char addr[]){
+inline short addr_to_port(char addr[]){
 	return *(short *)&addr[4];
 }
 
+std::ostream & operator<<(std::ostream & str, MemberListEntry & e);
+
+std::ostream & operator<<(std::ostream & str, vector<MemberListEntry> & v);
 #endif /* _MP1NODE_H_ */
