@@ -238,7 +238,8 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		MemberListEntry new_entry(id, 
 			port, new_heartbeat, this->memberNode->heartbeat);	//use self heartbeat as local time	
 		this->memberNode->memberList.push_back(new_entry);
-
+		DEBUG(string("member list size: ") + to_string(this->memberNode->memberList.size()));
+		cout << "member list size: " << this->memberNode->memberList.size() << endl;
 		//send back JOINREP with new membership list
 		size_t msgsize = sizeof(MessageHdr) + sizeof(this->memberNode->memberList);
 		MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
@@ -247,6 +248,9 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		
 		free(send_msg);
 		delete(new_address);
+	}
+	else if(msg->msgType == JOINREP){
+
 	}
 }
 
@@ -315,4 +319,13 @@ void MP1Node::printAddress(Address *addr)
 {
     printf("%d.%d.%d.%d:%d \n",  addr->addr[0],addr->addr[1],addr->addr[2],
                                                        addr->addr[3], *(short*)&addr->addr[4]) ;    
+}
+
+
+void MP1Node::DEBUG(string s){
+	#ifdef MYLOG
+	//char s[1024];
+	//sprintf(s, "member list size: %lu", this->memberNode->memberList.size());
+	log->LOG(&this->memberNode->addr ,s.c_str());	
+	#endif
 }
