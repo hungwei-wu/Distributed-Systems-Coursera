@@ -113,6 +113,8 @@ int MP1Node::initThisNode(Address *joinaddr) {
 		MemberListEntry *new_entry = new MemberListEntry(addr_to_id(this->memberNode->addr.addr), addr_to_port(this->memberNode->addr.addr), this->memberNode->heartbeat, this->memberNode->heartbeat);
 		this->memberNode->memberList.push_back(*new_entry);
 		this->memberNode->myPos = this->memberNode->memberList.end()-1;
+		log->logNodeAdd(&this->memberNode->addr, &this->memberNode->addr);
+
 		DEBUG(string("Introducer => my pos is ") + to_string((int)(this->memberNode->myPos - this->memberNode->memberList.begin())));
 		stringstream ss;
 		ss << *this->memberNode->myPos;
@@ -229,13 +231,12 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	 */
 	MessageHdr* msg = (MessageHdr *)data;
 	if(msg->msgType == JOINREQ){
-		std::cout << "Receive joinreq" << endl;	
 		//add new member to membership list
 		char *new_addr = (char *)(msg+1);
 		int id = addr_to_id(new_addr);
-		cout << "receive id: " << id << endl;
+		//cout << "receive id: " << id << endl;
 		short port = addr_to_port(new_addr);
-		cout << "receive port: " << port << endl;	
+		//cout << "receive port: " << port << endl;	
 		
 		//create target address
 		Address *new_address = new Address();
@@ -247,37 +248,51 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		MemberListEntry new_entry(id, 
 			port, new_heartbeat, this->memberNode->heartbeat);	//use self heartbeat as local time	
 		this->memberNode->memberList.push_back(new_entry);
-		DEBUG(string("member list size: ") + to_string(this->memberNode->memberList.size()));
 		cout << "member list size: " << this->memberNode->memberList.size() << endl;
 		//send back JOINREP with new membership list
-		auto iter = this->memberNode->memberList.end()-1;	//point to last push backed  item
-		JoinRepData send_data;
-		send_data.pos = iter;
-		send_data.memberList = this->memberNode->memberList;
-		//size_t msgsize = sizeof(MessageHdr) + sizeof(this->memberNode->memberList);
-		size_t msgsize = sizeof(MessageHdr) + sizeof(send_data);
+		int iter = this->memberNode->memberList.size()-1;
+
+		size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->memberNode->memberList.size();
 		MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+
 		send_msg->msgType = JOINREP;
-		//memcpy((char *)(send_msg+1), &this->memberNode->memberList, sizeof(this->memberNode->memberList));
-		memcpy((char *)(send_msg+1), &send_data, sizeof(send_data));
-		emulNet->ENsend(&this->memberNode->addr, new_address, (char *)send_msg, msgsize);
+		send_msg->ele_num = this->memberNode->memberList.size();
 		
+		memcpy((char *)(send_msg+1), &iter, sizeof(int));
+		memcpy((char *)(send_msg+1) + sizeof(int), (this->memberNode->memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
+		
+		emulNet->ENsend(&this->memberNode->addr, new_address, (char *)send_msg, msgsize);
+				
+		log->logNodeAdd(&this->memberNode->addr, new_address);
+
 		free(send_msg);
 		delete(new_address);
 
-		stringstream ss;
-		ss << this->memberNode->memberList;
-		DEBUG(ss.str());
+		//stringstream ss;
+		//ss << this->memberNode->memberList;
+		//DEBUG(ss.str());
 	}
 	else if(msg->msgType == JOINREP){
-		unsigned int get_data_size = size + (char *)(msg+1) - (char *)(msg);
-		JoinRepData *get_data = (JoinRepData *)malloc(get_data_size);
-		memcpy(get_data, (char *)(msg+1), get_data_size);
-		//auto myPos_pointer = (vector<MemberListEntry>::iterator *)(msg+1);	
-		//auto memberList = *(vector<MemberListEntry> *)(myPos_pointer+1);
-		DEBUG(string("recieved JOINREP, list size: ") + to_string(get_data->memberList.size()));
-		this->memberNode->myPos = get_data->pos;
-		this->memberNode->memberList = get_data->memberList;
+		unsigned int get_data_size = size - ((char *)(msg+1) - (char *)(msg));
+		MemberListEntry *entries = (MemberListEntry *)malloc(get_data_size);
+		
+		int ele_num = msg->ele_num;
+		int iter;
+		//because of padding issue, can't simply memcpy whole structure at once
+		memcpy(&iter, (char *)(msg+1), sizeof(int));
+		memcpy(entries, (char *)(msg+1) + sizeof(int), sizeof(MemberListEntry) * ele_num);
+		this->memberNode->memberList = vector<MemberListEntry>(entries, entries + ele_num);
+		this->memberNode->myPos = this->memberNode->memberList.begin() + iter;
+		//stringstream ss;
+		//ss << this->memberNode->memberList;
+		//DEBUG(ss.str());
+	
+		for(auto &e : this->memberNode->memberList){
+			Address* tmp_addr = create_address(e.getid(), e.getport());
+			log->logNodeAdd(&this->memberNode->addr, tmp_addr);
+			delete tmp_addr;
+			
+		}
 	}
 
 }
@@ -294,7 +309,9 @@ void MP1Node::nodeLoopOps() {
 	/*
 	 * Your code goes here
 	 */
+	//update myPos entry
 
+	//delete 
     return;
 }
 
@@ -329,13 +346,6 @@ Address MP1Node::getJoinAddress() {
  */
 void MP1Node::initMemberListTable(Member *memberNode) {
 	memberNode->memberList.clear();
-	//TODO: add itself to memberList?
-	// no need? cause will always be introduced by same introducer
-	//Address *new_address = memberNode->addr;
-	//MemberListEntry* new_entry = new MemberListEntry(new_addr->getid(), new_addr->getport()
-	//								, new_addr->heartbeat, this->member->heartbeat);
-	
-		
 }
 
 /**
@@ -354,6 +364,15 @@ void MP1Node::DEBUG(string s){
 	#ifdef MYLOG
 	log->LOG(&this->memberNode->addr ,s.c_str());	
 	#endif
+}
+
+Address *create_address(int id, short port){
+	Address *address = new Address();
+	//char *addr = new char[6];
+	memcpy(&address->addr[0], &id, sizeof(int));
+	memcpy(&address->addr[4], &port, sizeof(short));
+
+	return address;
 }
 
 std::ostream & operator<<(std::ostream & str, MemberListEntry & e) { 

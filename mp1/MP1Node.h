@@ -41,12 +41,14 @@ enum MsgTypes{
  */
 typedef struct MessageHdr {
 	enum MsgTypes msgType;
+	int ele_num;
 }MessageHdr;
 
-typedef struct JoinRepData{
+/*typedef struct JoinRepData{
 	vector<MemberListEntry>::iterator pos;
 	vector<MemberListEntry> memberList;
-}JoinRepData;
+}JoinRepData;*/
+
 /**
  * CLASS NAME: MP1Node
  *
@@ -83,12 +85,20 @@ public:
 };
 
 inline int addr_to_id(char addr[]){
-	return *(int *)addr;
+	//return *(int *)addr;
+	int id;
+	memcpy(&id, addr, sizeof(int));
+	return id; 
 }
 
 inline short addr_to_port(char addr[]){
-	return *(short *)&addr[4];
+	//return *(short *)&addr[4];
+	short port;
+	memcpy(&port, &addr[4], sizeof(short));
+	return port;
 }
+
+Address *create_address(int, short);
 
 std::ostream & operator<<(std::ostream & str, MemberListEntry & e);
 
