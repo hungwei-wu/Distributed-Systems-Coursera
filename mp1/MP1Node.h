@@ -31,6 +31,7 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
+	PROPAGATE,
     DUMMYLASTMSGTYPE
 };
 
@@ -81,6 +82,7 @@ public:
 	Address getJoinAddress();
 	void initMemberListTable(Member *memberNode);
 	void printAddress(Address *addr);
+	void mergeMemberList(vector<MemberListEntry> &);
 	virtual ~MP1Node();
 };
 

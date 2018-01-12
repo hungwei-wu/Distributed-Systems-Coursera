@@ -6,7 +6,8 @@
  **********************************/
 
 #include "MP1Node.h"
-#include <iostream>
+#include <cassert>
+#include <algorithm>
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
  */
@@ -115,10 +116,10 @@ int MP1Node::initThisNode(Address *joinaddr) {
 		this->memberNode->myPos = this->memberNode->memberList.end()-1;
 		log->logNodeAdd(&this->memberNode->addr, &this->memberNode->addr);
 
-		DEBUG(string("Introducer => my pos is ") + to_string((int)(this->memberNode->myPos - this->memberNode->memberList.begin())));
-		stringstream ss;
-		ss << *this->memberNode->myPos;
-		DEBUG(ss.str());
+		//DEBUG(string("Introducer => my pos is ") + to_string((int)(this->memberNode->myPos - this->memberNode->memberList.begin())));
+		//stringstream ss;
+		//ss << *this->memberNode->myPos;
+		//DEBUG(ss.str());
 	}
     return 0;
 }
@@ -272,7 +273,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		//ss << this->memberNode->memberList;
 		//DEBUG(ss.str());
 	}
-	else if(msg->msgType == JOINREP){
+	else if(msg->msgType == JOINREP || msg->msgType == PROPAGATE){
 		unsigned int get_data_size = size - ((char *)(msg+1) - (char *)(msg));
 		MemberListEntry *entries = (MemberListEntry *)malloc(get_data_size);
 		
@@ -281,18 +282,30 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		//because of padding issue, can't simply memcpy whole structure at once
 		memcpy(&iter, (char *)(msg+1), sizeof(int));
 		memcpy(entries, (char *)(msg+1) + sizeof(int), sizeof(MemberListEntry) * ele_num);
-		this->memberNode->memberList = vector<MemberListEntry>(entries, entries + ele_num);
-		this->memberNode->myPos = this->memberNode->memberList.begin() + iter;
+		//this->memberNode->memberList = vector<MemberListEntry>(entries, entries + ele_num);
+		auto new_ml = vector<MemberListEntry>(entries, entries + ele_num);
+
+		int old_size = this->memberNode->memberList.size();
+
+		this->mergeMemberList(new_ml);
+		if(msg->msgType == JOINREP){
+			this->memberNode->myPos = this->memberNode->memberList.begin() + iter;
+		}
 		//stringstream ss;
 		//ss << this->memberNode->memberList;
 		//DEBUG(ss.str());
-	
-		for(auto &e : this->memberNode->memberList){
+		auto& my_ml = this->memberNode->memberList;
+		for(auto i=my_ml.begin()+old_size; i<my_ml.end(); i++){
+			Address* tmp_addr = create_address(i->getid(), i->getport());
+			log->logNodeAdd(&this->memberNode->addr, tmp_addr);
+			delete tmp_addr;
+		}
+		/*for(auto &e : this->memberNode->memberList){
 			Address* tmp_addr = create_address(e.getid(), e.getport());
 			log->logNodeAdd(&this->memberNode->addr, tmp_addr);
 			delete tmp_addr;
 			
-		}
+		}*/
 	}
 
 }
@@ -310,8 +323,30 @@ void MP1Node::nodeLoopOps() {
 	 * Your code goes here
 	 */
 	//update myPos entry
+	this->memberNode->myPos->setheartbeat(this->memberNode->heartbeat);
+	this->memberNode->myPos->settimestamp(this->memberNode->heartbeat);
+	//delete failed node entries
 
-	//delete 
+	//propogate to other nodes
+	int iter = 0;	//don't care
+
+	size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->memberNode->memberList.size();
+	MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+
+	send_msg->msgType = PROPAGATE;
+	send_msg->ele_num = this->memberNode->memberList.size();
+		
+	memcpy((char *)(send_msg+1), &iter, sizeof(int));
+	memcpy((char *)(send_msg+1) + sizeof(int), (this->memberNode->memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
+	auto& my_ml = this->memberNode->memberList;
+	for(auto i=my_ml.begin(); i<my_ml.end(); i++){
+		if(i == this->memberNode->myPos) continue;
+		Address* tmp_addr = create_address(i->getid(), i->getport());
+			
+		emulNet->ENsend(&this->memberNode->addr, tmp_addr, (char *)send_msg, msgsize);
+		delete(tmp_addr);
+	}	
+
     return;
 }
 
@@ -359,6 +394,36 @@ void MP1Node::printAddress(Address *addr)
                                                        addr->addr[3], *(short*)&addr->addr[4]) ;    
 }
 
+void MP1Node::mergeMemberList(vector<MemberListEntry> &new_ml){
+	auto& my_ml = this->memberNode->memberList;
+	stringstream ss;
+	//ss << this->memberNode->memberList;
+	//DEBUG(string("original list: ") + ss.str());
+	//stringstream ss;
+	//ss << new_ml;
+	//DEBUG(string("new list: ") + ss.str());
+	
+	unsigned int min_size = min(my_ml.size(), new_ml.size());	
+	for(unsigned int i=0; i < min_size; i++){
+		assert(my_ml[i].getid() == new_ml[i].getid());
+		assert(my_ml[i].getport() == new_ml[i].getport());
+		//update heartbeats and local timestamps
+		if(my_ml[i].getheartbeat() < new_ml[i].getheartbeat()){
+			my_ml[i].settimestamp(this->memberNode->heartbeat);
+			my_ml[i].setheartbeat(new_ml[i].getheartbeat());
+		}
+	}
+	//create new entries locally if new memberlist contains new ones
+	for(unsigned int i=my_ml.size(); i<new_ml.size(); i++){
+		my_ml.push_back(new_ml[i]);
+	}
+	assert(my_ml.size() >= new_ml.size());
+	ss.flush();
+	//ss << this->memberNode->memberList;
+	//DEBUG(string("merged list: ") + ss.str());
+	
+	//DEBUG(string("==="));
+}
 
 void MP1Node::DEBUG(string s){
 	#ifdef MYLOG
