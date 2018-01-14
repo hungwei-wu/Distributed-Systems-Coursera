@@ -35,6 +35,12 @@ enum MsgTypes{
     DUMMYLASTMSGTYPE
 };
 
+enum class State{
+	ALIVE,
+	FAIL,
+	DELETED
+};
+
 /**
  * STRUCT NAME: MessageHdr
  *
@@ -63,6 +69,8 @@ private:
 	Member *memberNode;
 	char NULLADDR[6];
 	void DEBUG(string);
+	int member_pos;
+	vector<State>member_states;
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
 	Member * getMemberNode() {
