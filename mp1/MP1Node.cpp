@@ -345,9 +345,12 @@ void MP1Node::nodeLoopOps() {
 	memcpy((char *)(send_msg+1), &iter, sizeof(int));
 	memcpy((char *)(send_msg+1) + sizeof(int), (this->memberNode->memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
 	auto& my_ml = this->memberNode->memberList;
-	for(auto i=my_ml.begin(); i<my_ml.end(); i++){
-		if(i == this->memberNode->memberList.begin() + this->member_pos) continue;
-		Address* tmp_addr = create_address(i->getid(), i->getport());
+	auto& nodes_num_to_send = random_subset(0, my_ml.size(), this->gossip_num);
+	//for(auto i=my_ml.begin(); i<my_ml.end(); i++){
+	for(int i : nodes_num_to_send){
+		if(i == this->member_pos) continue;
+		auto& entry = my_ml[i];
+		Address* tmp_addr = create_address(entry.getid(), entry.getport());
 			
 		emulNet->ENsend(&this->memberNode->addr, tmp_addr, (char *)send_msg, msgsize);
 		delete(tmp_addr);
@@ -458,4 +461,12 @@ std::ostream & operator<<(std::ostream & str, vector<MemberListEntry> & v) {
 		str << e << endl;
 	}
 	return str;
+}
+
+vector<int>& random_subset(int start, int end, int k){
+	vector<int> *v = new vector<int>(end - start);
+	iota(v->begin(), v->end(), start);
+	random_shuffle(v->begin(), v->end());
+	v->resize(k);
+	return *v;
 }

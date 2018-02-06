@@ -71,6 +71,7 @@ private:
 	void DEBUG(string);
 	int member_pos;
 	vector<State>member_states;
+	const int gossip_num = 3;
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
 	Member * getMemberNode() {
@@ -113,4 +114,6 @@ Address *create_address(int, short);
 std::ostream & operator<<(std::ostream & str, MemberListEntry & e);
 
 std::ostream & operator<<(std::ostream & str, vector<MemberListEntry> & v);
+
+vector<int>& random_subset(int start, int end, int k);
 #endif /* _MP1NODE_H_ */
