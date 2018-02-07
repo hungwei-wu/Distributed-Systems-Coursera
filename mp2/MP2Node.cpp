@@ -51,7 +51,8 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
-
+	//TODO: handle if ring has been changed
+	ring = curMemList;
 
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
@@ -98,6 +99,23 @@ size_t MP2Node::hashFunction(string key) {
 	return ret%RING_SIZE;
 }
 
+void MP2Node::dispatchMessages(Message* message){
+	//find replicas
+	vector<Node> replicas = findNodes(message->key);
+	// send messages to replicas	
+	for(auto& rep: replicas){
+		send_message(message, &message->fromAddr, rep.getAddress());
+	}
+}
+
+void MP2Node::send_message(Message* message, Address* from_addr, Address* to_addr){
+	string msg_string = message->toString();
+	int size = msg_string.length() + 1;	//+1 for '\0'
+	char* c_str = new char[size];
+	strcpy(c_str, msg_string.c_str());
+	emulNet->ENsend(from_addr, to_addr, c_str, size);
+}
+
 /**
  * FUNCTION NAME: clientCreate
  *
@@ -111,6 +129,10 @@ void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
 	 */
+	//construct message
+	Message* m = new Message(g_transID, this->memberNode->addr, CREATE, key, value);
+	g_transID++;
+	dispatchMessages(m);	
 }
 
 /**
@@ -126,6 +148,9 @@ void MP2Node::clientRead(string key){
 	/*
 	 * Implement this
 	 */
+	Message* m = new Message(g_transID, this->memberNode->addr, READ, key);
+	g_transID++;
+	dispatchMessages(m);	
 }
 
 /**
@@ -141,6 +166,9 @@ void MP2Node::clientUpdate(string key, string value){
 	/*
 	 * Implement this
 	 */
+	Message* m = new Message(g_transID, this->memberNode->addr, UPDATE, key, value);
+	g_transID++;
+	dispatchMessages(m);	
 }
 
 /**
@@ -156,6 +184,9 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
+	Message* m = new Message(g_transID, this->memberNode->addr, DELETE, key);
+	g_transID++;
+	dispatchMessages(m);	
 }
 
 /**

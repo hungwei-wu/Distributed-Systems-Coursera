@@ -18,7 +18,7 @@
 #include "Params.h"
 #include "Message.h"
 #include "Queue.h"
-
+#include <unordered_map>
 /**
  * CLASS NAME: MP2Node
  *
@@ -48,6 +48,9 @@ private:
 	// Object of Log
 	Log * log;
 
+	int trans_id;
+	//store mapping of <Addr:transID, success_count>
+	unordered_map<std::string, int> success_map;
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
 	Member * getMemberNode() {
@@ -69,12 +72,14 @@ public:
 	// receive messages from Emulnet
 	bool recvLoop();
 	static int enqueueWrapper(void *env, char *buff, int size);
+	//
+	void send_message(Message* m, Address* from_addr, Address* to_addr);
 
 	// handle messages from receiving queue
 	void checkMessages();
 
 	// coordinator dispatches messages to corresponding nodes
-	void dispatchMessages(Message message);
+	void dispatchMessages(Message* message);
 
 	// find the addresses of nodes that are responsible for a key
 	vector<Node> findNodes(string key);
