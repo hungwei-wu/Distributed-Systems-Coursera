@@ -48,9 +48,14 @@ private:
 	// Object of Log
 	Log * log;
 
-	int trans_id;
-	//store mapping of <Addr:transID, success_count>
-	unordered_map<std::string, int> success_map;
+	// record round in synchronous system
+	int round;
+	// record which transID and its success_count which has been issued in certain round
+	unordered_map<int, unordered_map<int, int>* >round_success;
+	//store message mapping in coordinator and use to log success/fail
+	unordered_map<int, Message*> message_map;
+	//store mapping of <transID, success_count>
+	//unordered_map<int, int> success_map;
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
 	Member * getMemberNode() {
@@ -68,7 +73,7 @@ public:
 	void clientRead(string key);
 	void clientUpdate(string key, string value);
 	void clientDelete(string key);
-
+	
 	// receive messages from Emulnet
 	bool recvLoop();
 	static int enqueueWrapper(void *env, char *buff, int size);
@@ -88,11 +93,14 @@ public:
 	bool createKeyValue(string key, string value, ReplicaType replica);
 	string readKey(string key);
 	bool updateKeyValue(string key, string value, ReplicaType replica);
-	bool deletekey(string key);
+	bool deleteKey(string key);
+	void reply(int trans_id, Address to_addr, bool success);
 
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
-
+	
+	void log_message_success(int trans_id, int suc_count);
+	void DEBUG(string& s);
 	~MP2Node();
 };
 

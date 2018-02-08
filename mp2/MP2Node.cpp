@@ -15,6 +15,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
+	this->round = 0;
 }
 
 /**
@@ -102,7 +103,7 @@ size_t MP2Node::hashFunction(string key) {
 void MP2Node::dispatchMessages(Message* message){
 	//find replicas
 	vector<Node> replicas = findNodes(message->key);
-	// send messages to replicas	
+	// send messages  replicas	
 	for(auto& rep: replicas){
 		send_message(message, &message->fromAddr, rep.getAddress());
 	}
@@ -112,7 +113,8 @@ void MP2Node::send_message(Message* message, Address* from_addr, Address* to_add
 	string msg_string = message->toString();
 	int size = msg_string.length() + 1;	//+1 for '\0'
 	char* c_str = new char[size];
-	strcpy(c_str, msg_string.c_str());
+	//strcpy(c_str, msg_string.c_str());
+	memcpy(c_str, msg_string.c_str(), size);
 	emulNet->ENsend(from_addr, to_addr, c_str, size);
 }
 
@@ -202,6 +204,8 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Insert key, value, replicaType into the hash table
+	
+	return true;
 }
 
 /**
@@ -232,6 +236,7 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Update key in local hash table and return true or false
+	return true;
 }
 
 /**
@@ -242,11 +247,12 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  * 				1) Delete the key from the local hash table
  * 				2) Return true or false based on success or failure
  */
-bool MP2Node::deletekey(string key) {
+bool MP2Node::deleteKey(string key) {
 	/*
 	 * Implement this
 	 */
 	// Delete the key from the local hash table
+	return true;
 }
 
 /**
@@ -264,9 +270,11 @@ void MP2Node::checkMessages() {
 	char * data;
 	int size;
 
-	/*
-	 * Declare your local variables here
-	 */
+	//works in synchronyze version
+	//need at least one replica success to detect
+	//change to more complex structure to detect case when failure of all 3 replicas
+	unordered_map<int, int>* success_map = new unordered_map<int, int>();
+	round += 1;
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
@@ -277,18 +285,100 @@ void MP2Node::checkMessages() {
 		size = memberNode->mp2q.front().size;
 		memberNode->mp2q.pop();
 
-		string message(data, data + size);
+		string message_string(data, 0, size);
 
 		/*
 		 * Handle the message types here
 		 */
+		Message *msg = new Message(message_string);
+		if(msg->type == REPLY){
+			string debug_msg = msg->fromAddr.getAddress() + string(" ") + to_string(msg->success);
+			//DEBUG(debug_msg);
+		}
+		bool is_success;
+		string read_res;
+		if(message_map.find(msg->transID) == message_map.end()){
+			// insert if trans id is not in message_map yet (avoid emplace by REPLY message)
+			message_map.insert({msg->transID, msg});
+		}
+		switch(msg->type){
+			case CREATE: 
+				is_success = createKeyValue(msg->key, msg->value, msg->replica);
+				log->logCreateSuccess(&this->memberNode->addr, false, msg->transID, msg->key, msg->value);
+				reply(msg->transID, msg->fromAddr, is_success);
+				break;
+			case READ:
+				read_res = readKey(msg->key);
+				reply(msg->transID, msg->fromAddr, is_success);
+				break;
+			case UPDATE:
+				is_success = updateKeyValue(msg->key, msg->value, msg->replica);
+				reply(msg->transID, msg->fromAddr, is_success);
+				break;
+			case DELETE:
+				is_success = deleteKey(msg->key);
+				reply(msg->transID, msg->fromAddr, is_success);
+				break;
+			case REPLY:
+				if(msg->success) (*success_map)[msg->transID] += 1;
+				break;
+			default:
+				runtime_error("invalid message type");
+				break;
+		}
 
 	}
+	round_success.insert({round, success_map});
+
 
 	/*
 	 * This function should also ensure all READ and UPDATE operation
 	 * get QUORUM replies
 	 */
+	 if(round_success.find(round-2) != round_success.end()){
+	 	unordered_map<int, int>* map_val = round_success[round-2];
+	 	for(auto elem: *map_val){
+			int trans_id = elem.first;
+	 		int suc_count = elem.second;
+			log_message_success(trans_id, suc_count);
+			//cout << elem.first << "::" << elem.second << endl;
+	 	}
+	 }
+
+}
+
+void MP2Node::log_message_success(int trans_id, int suc_count){
+	Message* msg = message_map.at(trans_id);	// throw exception if key not exists
+	bool qourum = false;
+	if(suc_count >= 2) qourum = true;	// meet majority
+	switch(msg->type){
+		case(CREATE): 
+			if(qourum) log->logCreateSuccess(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
+			else log->logCreateFail(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
+			break;
+		case(READ): 
+			if(qourum) log->logReadSuccess(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
+			else log->logReadFail(&this->memberNode->addr, true, trans_id, msg->key);
+			break;
+		case(UPDATE): 
+			if(qourum) log->logUpdateSuccess(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
+			else log->logUpdateFail(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
+			break;
+		case(DELETE): 
+			if(qourum) log->logDeleteSuccess(&this->memberNode->addr, true, trans_id, msg->key);
+			else log->logDeleteFail(&this->memberNode->addr, true, trans_id, msg->key);
+			break;
+		default:
+			runtime_error("invalid message type");
+			break;
+	}
+	message_map.erase(trans_id);
+	delete msg;
+}
+
+void MP2Node::reply(int trans_id, Address to_addr, bool success){
+	Message* m = new Message(trans_id, this->memberNode->addr, REPLY, success);
+	send_message(m, &m->fromAddr, &to_addr);
 }
 
 /**
@@ -359,4 +449,10 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
+}
+
+void MP2Node::DEBUG(string& s){
+	#ifdef MYLOG
+	log->LOG(&this->memberNode->addr, s.c_str());
+	#endif
 }
