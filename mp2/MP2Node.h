@@ -94,13 +94,14 @@ public:
 	string readKey(string key);
 	bool updateKeyValue(string key, string value, ReplicaType replica);
 	bool deleteKey(string key);
-	void reply(int trans_id, Address to_addr, bool success);
+	void reply(int trans_id, Address *to_addr, bool success);
 
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
 	
 	void log_message_success(int trans_id, int suc_count);
 	void DEBUG(string& s);
+
 	~MP2Node();
 };
 
