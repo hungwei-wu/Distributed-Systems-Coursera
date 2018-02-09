@@ -19,6 +19,7 @@
 #include "Message.h"
 #include "Queue.h"
 #include <unordered_map>
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -50,8 +51,8 @@ private:
 
 	// record round in synchronous system
 	int round;
-	// record which transID and its success_count which has been issued in certain round
-	unordered_map<int, unordered_map<int, int>* >round_success;
+	// record <round, transIDs> which has been issued in certain round
+	unordered_map<int, vector<int>* >round_success;
 	//store message mapping in coordinator and use to log success/fail
 	unordered_map<int, Message*> message_map;
 	//store mapping of <transID, success_count>

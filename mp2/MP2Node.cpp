@@ -103,7 +103,7 @@ size_t MP2Node::hashFunction(string key) {
 void MP2Node::dispatchMessages(Message* message){
 	//find replicas
 	vector<Node> replicas = findNodes(message->key);
-	// send messages  replicas	
+	// send messages to replicas	
 	for(auto& rep: replicas){
 		send_message(message, &message->fromAddr, rep.getAddress());
 	}
@@ -113,7 +113,7 @@ void MP2Node::send_message(Message* message, Address* from_addr, Address* to_add
 	string msg_string = message->toString();
 	int size = msg_string.length() + 1;	//+1 for '\0'
 	char* c_str = new char[size];
-	//strcpy(c_str, msg_string.c_str());
+
 	memcpy(c_str, msg_string.c_str(), size);
 	emulNet->ENsend(from_addr, to_addr, c_str, size);
 }
@@ -134,9 +134,9 @@ void MP2Node::clientCreate(string key, string value) {
 	//construct message
 	Message* m = new Message(g_transID, this->memberNode->addr, CREATE, key, value, PRIMARY);
 	if(round_success.find(round)==round_success.end()){
-		round_success.insert({round, new unordered_map<int, int>()});
+		round_success.insert({round, new vector<int>()});
 	}
-	round_success[round]->insert({m->transID, 0});
+	round_success[round]->push_back(m->transID);
 
 	message_map.insert({m->transID, m});
 	g_transID++;
@@ -277,18 +277,14 @@ unordered_map<int, int>& get_element(unordered_map<int, unordered_map<int, int>*
  * 				2) Handles the messages according to message types
  */
 void MP2Node::checkMessages() {
-	/*
-	 * Implement this. Parts of it are already implemented
-	 */
-	 //cout << "round: " << round << endl;
 	char * data;
 	int size;
-
+	
 	//works in synchronyze version
-	//need at least one replica success to detect
-	//change to more complex structure to detect case when failure of all 3 replicas
+	round++;
+	//store <trans_id, success count>, count replied success message in this round
 	unordered_map<int, int>* success_map = new unordered_map<int, int>();
-	round += 1;
+	
 
 	// dequeue all messages and handle them
 	while ( !memberNode->mp2q.empty() ) {
@@ -300,12 +296,12 @@ void MP2Node::checkMessages() {
 		memberNode->mp2q.pop();
 
 		string message_string(data, 0, size);
-		//cout << "in string: " << message_string << endl;
+		
 		/*
 		 * Handle the message types here
 		 */
 		Message *msg = new Message(message_string);
-		//cout << "in msg: " << msg->debug() << endl;
+
 		if(msg->type == REPLY){
 			string debug_msg = msg->fromAddr.getAddress() + string(" ") + to_string(msg->success);
 			//DEBUG(debug_msg);
@@ -337,7 +333,7 @@ void MP2Node::checkMessages() {
 			case REPLY:
 				
 				if(msg->success) (*success_map)[msg->transID] += 1;
-				else throw runtime_error("should always success");
+				else throw runtime_error("should always success currently");
 				break;
 			default:
 				throw runtime_error("invalid message type");
@@ -345,36 +341,39 @@ void MP2Node::checkMessages() {
 		}
 
 	}
-	//round_success.insert({round, success_map});
-
 
 	/*
 	 * This function should also ensure all READ and UPDATE operation
 	 * get QUORUM replies
 	 */
 	 if(round_success.find(round-2) != round_success.end()){
-	 	unordered_map<int, int>* original_map_val = round_success[round-2];
+		 // get all trans_ids within previous round
+		 // -2 indicate round trip
+	 	vector<int>* trans_ids = round_success[round-2];
 		unordered_map<int, int>* map_val = success_map;
+
 		cout << this->memberNode->addr.getAddress() << endl;
-		cout << original_map_val->size() << " " << map_val->size() << endl;
-	 	for(auto elem: *original_map_val){
-			int trans_id = elem.first;
+		cout << trans_ids->size() << " " << map_val->size() << endl;
+
+	 	for(auto trans_id: *trans_ids){
 	 		int suc_count = map_val->at(trans_id);
 			log_message_success(trans_id, suc_count);
-			//cout << elem.first << "::" << elem.second << endl;
 	 	}
-		//round_success.erase(round-3);
+		//round_success.erase(round-2);
 	 }
 
 }
 
+/*
+	detemine and log whether or not previous transaction succeed
+*/
 void MP2Node::log_message_success(int trans_id, int suc_count){
 	debug_count++;
 	cout << debug_count << endl;
 	Message* msg = message_map.at(trans_id);	// throw exception if key not exists
 	bool qourum = false;
 	if(suc_count >= 2) qourum = true;	// meet majority
-	else throw runtime_error("should always meet majority");
+	else throw runtime_error("should always meet majority currently");
 	switch(msg->type){
 		case(CREATE): 
 			if(qourum) log->logCreateSuccess(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
