@@ -134,9 +134,9 @@ void MP2Node::clientCreate(string key, string value) {
 	//construct message
 	Message* m = new Message(g_transID, this->memberNode->addr, CREATE, key, value, PRIMARY);
 	if(round_success.find(round)==round_success.end()){
-		round_success.insert({round, new vector<int>()});
+		round_success.insert({round, vector<int>()});
 	}
-	round_success[round]->push_back(m->transID);
+	round_success[round].push_back(m->transID);
 
 	message_map.insert({m->transID, m});
 	g_transID++;
@@ -349,13 +349,13 @@ void MP2Node::checkMessages() {
 	 if(round_success.find(round-2) != round_success.end()){
 		 // get all trans_ids within previous round
 		 // -2 indicate round trip
-	 	vector<int>* trans_ids = round_success[round-2];
+	 	vector<int>& trans_ids = round_success[round-2];
 		unordered_map<int, int>* map_val = success_map;
 
 		cout << this->memberNode->addr.getAddress() << endl;
-		cout << trans_ids->size() << " " << map_val->size() << endl;
+		cout << trans_ids.size() << " " << map_val->size() << endl;
 
-	 	for(auto trans_id: *trans_ids){
+	 	for(auto trans_id: trans_ids){
 	 		int suc_count = map_val->at(trans_id);
 			log_message_success(trans_id, suc_count);
 	 	}

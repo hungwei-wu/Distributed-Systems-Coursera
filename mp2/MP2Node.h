@@ -52,7 +52,7 @@ private:
 	// record round in synchronous system
 	int round;
 	// record <round, transIDs> which has been issued in certain round
-	unordered_map<int, vector<int>* >round_success;
+	unordered_map<int, vector<int> >round_success;
 	//store message mapping in coordinator and use to log success/fail
 	unordered_map<int, Message*> message_map;
 	//store mapping of <transID, success_count>
