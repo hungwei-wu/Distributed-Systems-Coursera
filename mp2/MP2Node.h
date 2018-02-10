@@ -96,7 +96,8 @@ public:
 	bool updateKeyValue(string key, string value, ReplicaType replica);
 	bool deleteKey(string key);
 	void reply(int trans_id, Address *to_addr, bool success);
-
+	void reply_read(int trans_id, Address *to_addr, string read_res);
+	
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
 	
