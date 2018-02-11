@@ -40,7 +40,7 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> curMemList;
-	bool change = false;
+	//bool change = false;
 
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
@@ -53,12 +53,31 @@ void MP2Node::updateRing() {
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
 	//TODO: handle if ring has been changed
-	ring = curMemList;
+	
 
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+	bool change = false;
+	if(ring.size()!=curMemList.size()) change = true;
+	else {
+		//change = equal(ring.begin(), ring.end(), curMemList.begin(), [](Node x, Node y) -> bool{return x.nodeAddress == y.nodeAddress;});
+		for(int i=0; i<ring.size(); i++){
+			if(ring[i].nodeAddress == curMemList[i].nodeAddress){
+				
+			}
+			else{
+				change = true;
+				break;
+			}
+		}
+	}
+	if(change){
+		ring = curMemList;
+		stabilizationProtocol();
+	}
+	
 }
 
 /**
@@ -493,6 +512,17 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
+	 for(auto& key_value : ht->hashTable){
+		clientCreate(key_value.first, key_value.second);
+		vector<Node> replicas = findNodes(key_value.first);
+		vector<Address>addrs(3);
+		transform(replicas.begin(), replicas.end(), addrs.begin(), [](Node n) -> Address{return n.nodeAddress;});
+		if(find(addrs.begin(), addrs.end(), this->memberNode->addr) == addrs.end()){
+			// current node is not a node responsible for the key's replication
+			bool suc = deleteKey(key_value.first);
+			if(!suc) throw runtime_error("key should exist in table when deleting");
+		}
+	 }
 }
 
 void MP2Node::DEBUG(string& s){
