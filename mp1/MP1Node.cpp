@@ -112,8 +112,8 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	if(*joinaddr == this->memberNode->addr){
 		//create first member entry for itself
 		MemberListEntry *new_entry = new MemberListEntry(addr_to_id(this->memberNode->addr.addr), addr_to_port(this->memberNode->addr.addr), this->memberNode->heartbeat, this->memberNode->heartbeat);
-		this->memberNode->memberList.push_back(*new_entry);
-		this->member_pos = this->memberNode->memberList.size() - 1;
+		this->all_memberList.push_back(*new_entry);
+		this->member_pos = this->all_memberList.size() - 1;
 		log->logNodeAdd(&this->memberNode->addr, &this->memberNode->addr);
 		this->member_states.push_back(State::ALIVE);
 		//DEBUG(string("Introducer => my pos is ") + to_string((int)(this->memberNode->myPos - this->memberNode->memberList.begin())));
@@ -244,20 +244,20 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		long new_heartbeat = *(long*)((char*)msg + size - sizeof(long));
 		MemberListEntry new_entry(id, 
 			port, new_heartbeat, this->memberNode->heartbeat);	//use self heartbeat as local time	
-		this->memberNode->memberList.push_back(new_entry);
+		this->all_memberList.push_back(new_entry);
 		this->member_states.push_back(State::ALIVE);
 
 		//send back JOINREP with new membership list
-		int iter = this->memberNode->memberList.size()-1;
+		int iter = this->all_memberList.size()-1;
 
-		size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->memberNode->memberList.size();
+		size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->all_memberList.size();
 		MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
 
 		send_msg->msgType = JOINREP;
-		send_msg->ele_num = this->memberNode->memberList.size();
+		send_msg->ele_num = this->all_memberList.size();
 		
 		memcpy((char *)(send_msg+1), &iter, sizeof(int));
-		memcpy((char *)(send_msg+1) + sizeof(int), (this->memberNode->memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
+		memcpy((char *)(send_msg+1) + sizeof(int), (this->all_memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
 		
 		emulNet->ENsend(&this->memberNode->addr, new_address, (char *)send_msg, msgsize);
 				
@@ -281,7 +281,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		memcpy(entries, (char *)(msg+1) + sizeof(int), sizeof(MemberListEntry) * ele_num);
 		auto new_ml = vector<MemberListEntry>(entries, entries + ele_num);
 
-		int old_size = this->memberNode->memberList.size();
+		int old_size = this->all_memberList.size();
 
 		this->mergeMemberList(new_ml);
 		if(msg->msgType == JOINREP){
@@ -292,14 +292,14 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 		//stringstream ss;
 		//ss << this->memberNode->memberList;
 		//DEBUG(ss.str());
-		auto& my_ml = this->memberNode->memberList;
+		auto& my_ml = this->all_memberList;
 		for(auto i=my_ml.begin()+old_size; i<my_ml.end(); i++){
 			Address* tmp_addr = create_address(i->getid(), i->getport());
 			log->logNodeAdd(&this->memberNode->addr, tmp_addr);
 			delete tmp_addr;
 		}
 	}
-
+	this->memberNode->memberList = get_failed_member_deleted();
 }
 
 /**
@@ -317,15 +317,15 @@ void MP1Node::nodeLoopOps() {
 	this->memberNode->heartbeat += 1;
 
 	//update myPos entry
-	this->memberNode->memberList[this->member_pos].setheartbeat(this->memberNode->heartbeat);
-	this->memberNode->memberList[this->member_pos].settimestamp(this->memberNode->heartbeat);
+	this->all_memberList[this->member_pos].setheartbeat(this->memberNode->heartbeat);
+	this->all_memberList[this->member_pos].settimestamp(this->memberNode->heartbeat);
 	
 	DEBUG(string("my pos: ") + to_string(this->member_pos));
 
 	//delete failed node entries
-	assert(this->memberNode->memberList.size() == this->member_states.size());
-	for(unsigned int i=0; i<this->memberNode->memberList.size(); i++){
-		auto& e = this->memberNode->memberList[i];
+	assert(this->all_memberList.size() == this->member_states.size());
+	for(unsigned int i=0; i<this->all_memberList.size(); i++){
+		auto& e = this->all_memberList[i];
 		if(this->memberNode->heartbeat - e.gettimestamp() > this->memberNode->pingCounter && this->member_states[i] == State::ALIVE){
 			this->member_states[i] = State::DELETED;
 			Address* tmp_addr = create_address(e.getid(), e.getport());
@@ -336,23 +336,23 @@ void MP1Node::nodeLoopOps() {
 	//propogate to other nodes
 	int iter = 0;	//don't care
 
-	size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->memberNode->memberList.size();
+	size_t msgsize = sizeof(MessageHdr) + sizeof(int) + sizeof(MemberListEntry) * this->all_memberList.size();
 	MessageHdr* send_msg = (MessageHdr *)malloc(msgsize * sizeof(char));
 
 	send_msg->msgType = PROPAGATE;
-	send_msg->ele_num = this->memberNode->memberList.size();
+	send_msg->ele_num = this->all_memberList.size();
 		
 	memcpy((char *)(send_msg+1), &iter, sizeof(int));
-	memcpy((char *)(send_msg+1) + sizeof(int), (this->memberNode->memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
-	auto& my_ml = this->memberNode->memberList;
+	memcpy((char *)(send_msg+1) + sizeof(int), (this->all_memberList.data()), sizeof(MemberListEntry) * send_msg->ele_num);
+	auto& my_ml = this->all_memberList;
 	for(auto i=my_ml.begin(); i<my_ml.end(); i++){
-		if(i == this->memberNode->memberList.begin() + this->member_pos) continue;
+		if(i == this->all_memberList.begin() + this->member_pos) continue;
 		Address* tmp_addr = create_address(i->getid(), i->getport());
 			
 		emulNet->ENsend(&this->memberNode->addr, tmp_addr, (char *)send_msg, msgsize);
 		delete(tmp_addr);
 	}	
-
+	this->memberNode->memberList = get_failed_member_deleted();
     return;
 }
 
@@ -387,6 +387,7 @@ Address MP1Node::getJoinAddress() {
  */
 void MP1Node::initMemberListTable(Member *memberNode) {
 	memberNode->memberList.clear();
+	this->all_memberList.clear();
 }
 
 /**
@@ -401,7 +402,7 @@ void MP1Node::printAddress(Address *addr)
 }
 
 void MP1Node::mergeMemberList(vector<MemberListEntry> &new_ml){
-	auto& my_ml = this->memberNode->memberList;
+	auto& my_ml = this->all_memberList;
 	stringstream ss;
 	//ss << this->memberNode->memberList;
 	//DEBUG(string("original list: ") + ss.str());
@@ -426,7 +427,7 @@ void MP1Node::mergeMemberList(vector<MemberListEntry> &new_ml){
 	}
 	assert(my_ml.size() >= new_ml.size());
 	ss.flush();
-	ss << this->memberNode->memberList;
+	ss << this->all_memberList;
 	DEBUG(string("merged list: ") + ss.str());
 	
 	DEBUG(string("==="));
@@ -436,6 +437,29 @@ void MP1Node::DEBUG(string s){
 	#ifdef MYLOG
 	log->LOG(&this->memberNode->addr ,s.c_str());	
 	#endif
+}
+
+/*int MP1Node::find_my_pos(vector<MemberListEntry>& memberList){
+	int my_id = addr_to_id(this->memberNode->addr);
+	int my_port = addr_to_port(this->memberNode->addr);
+	for(int i=0; i<memberList.size(); i++){
+		if(my_id==memberList[i].getid() && my_port==memberList[i].getport()){
+			return i;
+		}
+	}
+	return -1; //not found
+}*/
+
+vector<MemberListEntry> MP1Node::get_failed_member_deleted(){
+	assert(this->all_memberList.size() == this->member_states.size());
+	vector<MemberListEntry> list;
+	int i=0;
+	for(int i=0; i<this->all_memberList.size(); i++){
+		if(this->member_states[i]!=State::DELETED){
+			list.push_back(this->all_memberList[i]);
+		}
+	}
+	return list;
 }
 
 Address *create_address(int id, short port){
@@ -459,3 +483,6 @@ std::ostream & operator<<(std::ostream & str, vector<MemberListEntry> & v) {
 	}
 	return str;
 }
+
+
+

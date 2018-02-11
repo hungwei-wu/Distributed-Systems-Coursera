@@ -70,6 +70,7 @@ private:
 	char NULLADDR[6];
 	void DEBUG(string);
 	int member_pos;
+	vector<MemberListEntry> all_memberList;
 	vector<State>member_states;
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
@@ -91,6 +92,9 @@ public:
 	void initMemberListTable(Member *memberNode);
 	void printAddress(Address *addr);
 	void mergeMemberList(vector<MemberListEntry> &);
+	//int find_my_pos();
+	vector<MemberListEntry> get_failed_member_deleted();
+
 	virtual ~MP1Node();
 };
 
