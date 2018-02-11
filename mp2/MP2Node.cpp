@@ -40,7 +40,6 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> curMemList;
-	//bool change = false;
 
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
@@ -331,10 +330,7 @@ void MP2Node::checkMessages() {
 
 		bool is_success;
 		string read_res;
-		/*if(message_map.find(msg->transID) == message_map.end()){
-			// insert if trans id is not in message_map yet (avoid emplace by REPLY message)
-			message_map.insert({msg->transID, msg});
-		}*/
+		
 		switch(msg->type){
 			case CREATE: 
 				is_success = createKeyValue(msg->key, msg->value, msg->replica);
@@ -362,11 +358,11 @@ void MP2Node::checkMessages() {
 				break;
 			case REPLY:
 				if(msg->success) (*success_map)[msg->transID] += 1;
-				//else throw runtime_error("should always succeed currently");
+				
 				break;
 			case READREPLY:
-				if(!msg->value.empty()) log->logReadSuccess(&this->memberNode->addr, true, msg->transID, msg->key, read_res);
-				else log->logReadFail(&this->memberNode->addr, false, msg->transID, msg->key);
+				if(!msg->value.empty()) (*success_map)[msg->transID] += 1;//log->logReadSuccess(&this->memberNode->addr, true, msg->transID, msg->key, read_res);
+				//else log->logReadFail(&this->memberNode->addr, false, msg->transID, msg->key);
 				break;
 			default:
 				throw runtime_error("invalid message type");
@@ -383,7 +379,6 @@ void MP2Node::checkMessages() {
 		 // get all trans_ids within previous round
 		 // -2 indicate round trip
 	 	vector<int>& trans_ids = round_success[round-2];
-		//unordered_map<int, int>* map_val = success_map;
 
 		cout << this->memberNode->addr.getAddress() << endl;
 		cout << trans_ids.size() << " " << success_map->size() << endl;
@@ -402,13 +397,11 @@ void MP2Node::checkMessages() {
 	detemine and log whether or not previous transaction succeed
 */
 void MP2Node::log_message_success(int trans_id, int suc_count){
-	debug_count++;
-	//cout << debug_count << endl;
 	Message* msg = message_map.at(trans_id);	// throw exception if key not exists
 	bool qourum = false;
 	if(suc_count >= 2) qourum = true;	// if meet majority
 	else cout << "failed to meet quorum" << endl;
-	//throw runtime_error("should always meet majority currently");
+	
 	switch(msg->type){
 		case(CREATE): 
 			if(qourum) log->logCreateSuccess(&this->memberNode->addr, true, trans_id, msg->key, msg->value);
@@ -430,7 +423,7 @@ void MP2Node::log_message_success(int trans_id, int suc_count){
 			throw runtime_error("invalid message type");
 			break;
 	}
-	//message_map.erase(trans_id);
+	message_map.erase(trans_id);
 	delete msg;
 }
 
